@@ -59,27 +59,32 @@ def object_fun(x):
 
 
 
-def mini_mum_number(frame: Polygon, width=None, height=None, max_iter=100) -> int:
+def mini_mum_number(frame: Polygon, width=None, height=None, max_iter=300)-> int:
     square = get_rectangle([0, 0, 0], width, height)
-    ini_n = int(frame.area / square.area)
+    ini_n = int(frame.area / square.area)+1
     x_lower, y_lower, x_upper, y_upper = frame.bounds
     threshould = 0
     n = ini_n
-    while threshould > -0.95:
-
-        pso = PSO_rotate(func=object_fun, n_dim=3 * n, pop=40, max_iter=max_iter, x_lb=x_lower, x_ub=x_upper,
-                         y_lb=y_lower,
+    ini_state = None
+    while threshould > -0.99:
+        pso = PSO_rotate(func=object_fun, n_dim=3 * n, pop=80, max_iter=max_iter, x_lb=x_lower, x_ub=x_upper,
+                         y_lb=y_lower,ini_state=ini_state,
                          y_ub=y_upper)
         pso.run()
         threshould = pso.gbest_y
-        print('The {} time iteration best score is {}'.format(n - ini_n + 1,-threshould))
+        #print('The {} time iteration best score is {}'.format(n - ini_n + 1,-threshould))
         n += 1
+        ini_state = pso.gbest_x
+        mean = ini_state.reshape(-1,3)
+        mean = np.mean(mean,0)
+        ini_state = np.concatenate([ini_state,mean])
+
     print('the minimum num of the uav is :{}'.format(n))
     return n, pso.gbest_x
 
 frame = Polygon([[0, 0], [45, 0], [30, 34], [40, 50], [0, 34]]).convex_hull
+#frame = Polygon([[0,0],[37,0],[40,40],[0,50]]).convex_hull
 num, x = mini_mum_number(frame, width=20, height=17)
-
 squares = []
 for i in range(int(len(x) / 3)):
     print('the location of the {} uav is :{} and the tha is :{} '.format(i+1,(x[3 * i] ,x[3 * i + 1]), x[3 * i + 2]))

@@ -18,7 +18,6 @@ def set_run_mode(func, mode):
 
 
 def func_transformer(func):
-    print('func transfor')
     '''
     transform this kind of function:
     ```

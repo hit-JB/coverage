@@ -27,8 +27,8 @@ def get_rectangle(central_pos,width = 20,height = 17):
     miny,maxy = central_pos[1] - height/2, central_pos[1] + height/2
     return box(minx,miny,maxx,maxy)
 
-frame = Polygon([[0,0],[45,0],[30,34],[40,50],[0,34]]).convex_hull
-frame = Polygon([[0,0],[40,0],[40,34],[0,34]]).convex_hull
+frame = Polygon([[0,0],[37,0],[40,40],[0,50]]).convex_hull
+#frame = Polygon([[0,0],[40,0],[40,34],[0,34]]).convex_hull
 def object_fun(x):
     pos = x.reshape(-1,2)
     squares = [get_rectangle(pos[i], 20, 17) for i in range(pos.shape[0])]

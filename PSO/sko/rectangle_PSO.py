@@ -78,7 +78,7 @@ class PSO_rotate(SkoBase):
     """
 
     def __init__(self, func, n_dim=None, pop=40, max_iter=150, x_lb=-1e5, x_ub=1e5,y_lb = -1e5,y_ub = 1e5, w=0.8, c1=0.5, c2=0.5,
-                 constraint_eq=tuple(), constraint_ueq=tuple(), verbose=True
+                 constraint_eq=tuple(),ini_state = None, constraint_ueq=tuple(), verbose=True
                  , dim=None):
 
         n_dim = n_dim or dim  # support the earlier version
@@ -99,7 +99,8 @@ class PSO_rotate(SkoBase):
         self.has_constraint = bool(constraint_ueq)
         self.constraint_ueq = constraint_ueq
         self.is_feasible = np.array([True] * pop)
-        self.X = np.zeros((self.pop,self.n_dim))
+        self.X = np.zeros((self.pop, self.n_dim))
+
         for i in range(self.n_dim):
             if i % 3==0:
                 self.X[:,i] = np.random.uniform(low=self.x_lb, high=self.x_ub, size =self.pop)
@@ -107,6 +108,10 @@ class PSO_rotate(SkoBase):
                 self.X[:,i] = np.random.uniform(low =self.y_lb,high=self.y_ub,size=self.pop)
             else:
                 self.X[:, i] = np.random.uniform(low=0, high=360, size=self.pop)
+
+        if ini_state is not None:
+            self.X[0] = ini_state
+
         vx_high = (self.x_ub - self.x_lb) / (2 * self.n_dim)
         vy_high = (self.y_ub-self.y_lb) / (2 * self.n_dim)
         v_theta_high = 60
@@ -206,6 +211,7 @@ class PSO_rotate(SkoBase):
             self.cal_y()
             self.update_pbest()
             self.update_gbest()
+
             if precision is not None:
                 tor_iter = np.amax(self.pbest_y) - np.amin(self.pbest_y)
                 if tor_iter < precision:
@@ -218,7 +224,10 @@ class PSO_rotate(SkoBase):
                 print('Iter: {}, Best fit: {} '.format(iter_num, self.gbest_y))
 
             self.gbest_y_hist.append(self.gbest_y)
+            if self.gbest_y < -0.99:
+                break
         self.best_x, self.best_y = self.gbest_x, self.gbest_y
+
         return self.best_x, self.best_y
 
     fit = run
