@@ -59,7 +59,7 @@ def object_fun(x):
 
 
 
-def mini_mum_number(frame: Polygon, width=None, height=None, max_iter=300)-> int:
+def mini_mum_number(frame: Polygon, width=None, height=None, max_iter=30)-> int:
     square = get_rectangle([0, 0, 0], width, height)
     ini_n = int(frame.area / square.area)+1
     x_lower, y_lower, x_upper, y_upper = frame.bounds
@@ -79,17 +79,21 @@ def mini_mum_number(frame: Polygon, width=None, height=None, max_iter=300)-> int
         mean = np.mean(mean,0)
         ini_state = np.concatenate([ini_state,mean])
 
-    print('the minimum num of the uav is :{}'.format(n))
+    print('the minimum num of the uav is :{}'.format(n-1))
     return n, pso.gbest_x
 
 frame = Polygon([[0, 0], [45, 0], [30, 34], [40, 50], [0, 34]]).convex_hull
+frame = Polygon([[0,0],[25,0],[25,30],[17,30],[0,20]]).convex_hull
 #frame = Polygon([[0,0],[37,0],[40,40],[0,50]]).convex_hull
+import time
+t0 = time.process_time()
 num, x = mini_mum_number(frame, width=20, height=17)
+print('the cost of the time is:{}'.format(time.process_time()-t0))
 squares = []
 for i in range(int(len(x) / 3)):
     print('the location of the {} uav is :{} and the tha is :{} '.format(i+1,(x[3 * i] ,x[3 * i + 1]), x[3 * i + 2]))
     squares.append(get_rectangle([x[3 * i], x[3 * i + 1], x[3 * i + 2]]))
-figure(frame.exterior.coords[:])
+figure(frame.exterior.coords[:],color='r')
 for square in squares:
     figure(square.exterior.coords[:])
 plt.show()

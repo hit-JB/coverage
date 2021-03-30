@@ -220,7 +220,7 @@ class PSO_rotate(SkoBase):
                         break
                 else:
                     c = 0
-            if self.verbose and iter_num %40 == 0:
+            if self.verbose and iter_num %10 == 0:
                 print('Iter: {}, Best fit: {} '.format(iter_num, self.gbest_y))
 
             self.gbest_y_hist.append(self.gbest_y)

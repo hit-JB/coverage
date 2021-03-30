@@ -80,125 +80,146 @@ def vector_norm(v):
     return np.sqrt(np.sum(np.square(v)))
 
 
-def make_agent(central_pos, radius,num,world):
-    return Agent(central_pos, radius,num,world)
+def make_agent(central_pos, radius, num, world):
+    return Agent(central_pos, radius, num, world)
 
 
 class World():
     def __init__(self, points, agents_pos=None, radius=None):
-        self.agents = None if agents_pos is None and radius is None else [make_agent(agents_pos[i], radius,i,self) for i in
-                                                                          range(agents_pos.shape[0])]
+        self.agents = None if agents_pos is None and radius is None else [make_agent(agents_pos[i], radius, i, self) for
+                                                                          i in range(agents_pos.shape[0])]
         self.edge = Polygon(points).convex_hull
+
 
 def computer_g_Q(message):
     pass
 
-def get_agent(agents,num):
-    if isinstance(agents,Agent):
+
+def get_agent(agents, num):
+    if isinstance(agents, Agent):
         return agents
-    for agent in agents:
+    for i, agent in enumerate(agents):
         if agent.num == num:
-            return agent
+            return i, agent
+    return None
+
 
 class base_agent():
-    def __init__(self,central_pos, radius,num):
+    def __init__(self, central_pos, radius, num):
         self.central_pos = np.array(central_pos)
         self.radius = radius
         self.sense_area = get_circle(self.central_pos, self.radius)
         self.num = num
         self.unitity_area = None
 
-class Agent(base_agent):
-    def __init__(self, central_pos, radius,num,world):  # note all the coords are operared based np.array
-        super(Agent, self).__init__(central_pos,radius,num)
-        self.receive_Q = []
-        self.receive_R = []
-        self.send_Q = []
-        self.send_R = []
-        self.neighbors = None
-        self.U = []
-        self.world = world
-    def Agent_copy(self):
-        return base_agent(self.central_pos,self.radius,self.num)
     def reset_central(self, central_pos):
         self.central_pos = np.array(central_pos)
         self.sense_area = get_circle(self.central_pos, self.radius)
         self.unitity_area = None
 
-    def message(self):
-        self.get_neighbors()
-        self.message_initilize()
 
-        self.send_Q.append(self.MTN(self))
-        self.send_R.append(self.MTV(self))
-        for agent in self.neighbors:
-            self.send_Q.append(self.MTN(agent))
-            self.send_R.append(self.MTV(agent))
+class q_fun():
+    def __init__(self, q_ij: dict) -> 'Any':
+        self.q_ij = q_ij
 
-    def message_initilize(self,agents):
+    def computer_g(self, agent: base_agent, world: World):
+        assert isinstance(agent, base_agent)
+        gradient = np.zeros(2)
+        for message in self.q_ij:
+            message['value'].reset_u(agent)
+            message['value'].computer_edge(world)
+            gradient += message['value'].computer_g(agent)
+        return gradient
+
+
+class Agent(base_agent):
+    def __init__(self, central_pos, radius, num, world):  # note all the coords are operared based np.array
+        super(Agent, self).__init__(central_pos, radius, num)
+        self.receive_Q = None
+        self.receive_R = None
+        self.send_R = None
+        self.send_Q = None
+        self.neighbors = None
+        self.U = []
+        self.world = world
+
+    def message_change(self):
+        self.send_Q = cp.deepcopy(self.receive_R)
+
+    @property
+    def Agent_copy(self):
+        return base_agent(self.central_pos, self.radius, self.num)
+
+    def receive_message(self, agents):
+        self.receive_R = []
+        self.receive_Q = []
         for agent in agents:
-            for message in agent.send_Q:
-                if message['num'] == self.num:
-                    self.receive_Q.append(dict(num = agent.num, value = message['value'] ))
+            if agent.send_Q is None:
+                self.receive_Q is None
+            else:
+                q_ij = []
+                for message in agent.send_Q:  # send_Q is the copy of receive_R
+                    if message['num'] == self.num: continue
+                    q_ij.append(dict(num=message['num'], value=message['value']))
+                q_ij = q_fun(q_ij)
+                self.receive_Q.append(dict(num=agent.num, value=q_ij))
             for message in agent.send_R:
                 if message['num'] == self.num:
-                    self.receive_R.append(dict(num = agent.num, value = message['value']))
-        x_star = []
-        U_self = U_fun(self, self.neighbors)
-        U_self.computer_edge(self.world)
-        self_g = U_fun.computer_g(self)
-        others_g =[U_fun.computer_g(other) for other in  agents if other.num != self.num]
+                    self.receive_R.append(dict(num=agent.num, value=message['value']))
 
-        for message in self.receive_Q:
-            agent_num = message['num']
-            u_other = message['value']
-            for u in u_other:
-                other = get_agent(agents,agent_num)
-                u.reset_u(other)
-                u.computer_edge(self.world)
-                if other.num == self.num:
-                    self_g +=u.computer_edge(other)
-                else:
-                    others_g[agents.index(other)] += u.computer_edge(other)
-        return [self_g] + others_g
-    def MTN(self, agent:'Agent'):
-        q_ij = []
-        for message in self.receive_R:
-            if message['num'] == agent.num:continue
-            q_ij.append(dict(num = message['num'],value = message['value']))
-        return dict(num = agent.num, value = q_ij)
-
-    def MTV(self, agent):
+    def send_r(self):
+        self.send_R = []
+        self.get_neighbors(self.world)
         agents = [self] + self.neighbors
-        gradinets = self.message_initilize(agents)
+        r_g = self.message_initialize(agents)
+        x_star = [agents[i].central_pos + 0.1 * r_g[i]/(1e-4+vector_norm(r_g[i])) for i in range(len(r_g))]
+        agents_cp = [agents[i].Agent_copy for i in range(len(agents))]
+        for i,agent in enumerate(agents_cp): agent.reset_central(x_star[i])
+        for agent in agents:
+            self.send_R.append(dict(num=agent.num, value=U_fun(agents_cp[0], agents_cp[1:])))
 
+    def message_initialize(self, agents):  # the agents is the form of list [self, self.neighbors]
+        agents_cp = [agent.Agent_copy for agent in agents]
+        U_self = U_fun(agents_cp[0], agents_cp[1:])
+        U_self.computer_edge(self.world)
 
+        u_g = [U_self.computer_g(agent) for agent in agents_cp]
 
+        if self.receive_Q is None:
+            return u_g
+        for message in self.receive_Q:
+            p = get_agent(agents, message['num'])
+            if p is None:
+                continue
+            i, agent = p[0], p[1].Agent_copy
+            u_g[i] += message['value'].computer_g(agent, self.world)
+        return u_g
 
     def show_sense_area(self):
         figure(self.sense_area.exterior.coords[:], color='r')
 
-    def update_state(self, world):
-        self.get_neighbors(world)
-        others = [agent.sense_area for agent in self.neighbors]
-        U = U_fun(self.sense_area, others)
-        U.computer_edge(world)
-        step, _ = U.computer_g()
-        self.u = U.u
-        central_pos = self.central_pos + 0.1 * step
-        self.reset_central(central_pos=central_pos)
+    def update_state(self):
+        g = np.zeros(2)
+        for message in self.receive_R:
+            u = message['value']
+            u.reset_u(self.Agent_copy)
+            u.computer_edge(self.world)
+            g += u.computer_g(self.Agent_copy)
+        step = 0.1 * g/vector_norm(g)
+        central_points = self.central_pos + step
+        self.reset_central(central_points)
 
     def get_neighbors(self, world):
         self.neighbors = []
         for agent in world.agents:
-            if self is agent: continue
+            if self is agent:  continue
             if self.sense_area.intersects(agent.sense_area):
                 self.neighbors.append(agent)
 
 
 class U_fun():
     def __init__(self, central_agent=None, other_agents=None):
-        self.a= central_agent
+        self.a = central_agent
         self.b = other_agents
 
         self.agent = central_agent.sense_area
@@ -210,8 +231,9 @@ class U_fun():
         self.u = None
         self.A = []
         self.B = []
+
     def reset_u(self, agent):
-        assert isinstance(agent,Agent) or isinstance(agent,base_agent)
+        assert isinstance(agent, Agent) or isinstance(agent, base_agent)
         if agent.num == self.a.num:
             self.a = agent
             self.agent = self.a.sense_area
@@ -226,6 +248,7 @@ class U_fun():
         self.u = None
         self.A = []
         self.B = []
+
     def computer_edge(self, world: World):
         lines = []
         intersect_pos = []
@@ -255,10 +278,6 @@ class U_fun():
                 self.A.append(dict(v_n=n, length=length))
         lines_B = []
 
-        plt.figure()
-        figure(self.u.exterior.coords[:])
-        for i, line in enumerate(lines):
-            figure(line.coords[:], 'r')
 
         for i, line in enumerate(lines):
             if line is None or self.u.distance(line) > 1e-5:
@@ -282,12 +301,6 @@ class U_fun():
                 cos_multi(v0, v)) * vector_norm(v0)
             self.B.append((edge_low, edge_upper))
 
-        plt.figure()
-        figure(self.u.exterior.coords[:])
-        for i, line in enumerate(lines_B):
-            if line is None:continue
-            figure(line.coords[:], 'r')
-        plt.show()
 
         g_self = np.zeros(2)
         g_other = []
@@ -309,11 +322,13 @@ class U_fun():
             g_other.append(v_n @ (c1 + c2_other))
             g_self += v_n @ (c1 + c2)
         self.g = [g_self] + g_other
+
     def computer_g(self, agent):
-        for i,num in enumerate(self.num):
+        for i, num in enumerate(self.num):
             if agent.num == num:
                 return self.g[i]  # return the gradient of the given agent
         return np.zeros(2)
+
     def integral_c(self, other: Polygon):
         p = np.zeros(2)
         c1 = np.zeros((2, 2))
@@ -328,33 +343,27 @@ class U_fun():
         c2[1][0] = -1 / 4 * p ** -3 * (p ** 2 - 0.25 * (x_i[0] - x_j[0]) ** 2)
         c2[1][1] = 1 / 16 * p ** -3 * (x_j[0] - x_i[0]) * (x_j[1] - x_i[1])
         return c1, c2, -c2
-pos = np.array([[2, 2], [3.5, 2], [3, 3]])
-world = World([[0, 0], [10, 0], [5, 10]], agents_pos=pos, radius=2)
-agents = world.agents
-agents_cp = [agent.Agent_copy() for agent in agents]
 
 
-u3 = U_fun(agents[2],agents[0:2])
-u2 = U_fun(agents[1],[agents[0], agents[2]])
-u1 = U_fun(agents_cp[0],agents_cp[1:3])
-
-u1.computer_edge(world)
-for i,agent in enumerate(agents_cp):
-    print('the gradient of the agent{} and the class of the agent:{}'.format(u1.computer_g(agent),agent.__class__))
-
-
-agents[2].reset_central([5,2])
-u1.reset_u(agents[2].Agent_copy())
-u1.computer_edge(world)
-for i,agent in enumerate(agents):
-    print('the gradient of the agent{} and the class of the agent:{}'.format(u1.computer_g(agent),agent.__class__))
-
-plt.figure()
-figure(world.edge.exterior.coords[:])
-for agent in world.agents:
-    agent.show_sense_area()
-plt.show()
-
+if __name__ == '__main__':
+    pos = np.array([[2, 2], [3.5, 2],[4,4]])
+    world = World([[0, 0], [10, 0], [5, 10]], agents_pos=pos, radius=2)
+    agents = world.agents
+    for i in range(100):
+        for agent in agents:
+            agent.send_r()
+        for agent in agents:
+            agent.receive_message([agent]+agent.neighbors)
+        for agent in agents:
+            agent.message_change()
+            agent.update_state()
+        area =ops.unary_union([agent.sense_area for agent in agents])
+        print('the coverage area is :{}'.format(area.intersection(world.edge).area))
+    plt.figure()
+    figure(world.edge.exterior.coords[:])
+    for agent in agents:
+        figure(agent.sense_area.exterior.coords[:],color='r')
+    plt.show()
 #     figure(world.edge.exterior.coords[:])
 #     for agent in world.agents:
 #         agent.show_sense_area()
