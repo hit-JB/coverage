@@ -8,7 +8,7 @@ from shapely.geometry import Polygon
 from shapely.geometry import box
 import shapely.geometry as geometry
 import copy as cp
-
+import cv2
 
 def get_insect(line: LineString, boundary: LineString):
     coord1 = line.coords[0]
@@ -84,17 +84,6 @@ def make_agent(central_pos, radius, num, world):
     return Agent(central_pos, radius, num, world)
 
 
-class World():
-    def __init__(self, points, agents_pos=None, radius=None):
-        self.agents = None if agents_pos is None and radius is None else [make_agent(agents_pos[i], radius, i, self) for
-                                                                          i in range(agents_pos.shape[0])]
-        self.edge = Polygon(points).convex_hull
-
-
-def computer_g_Q(message):
-    pass
-
-
 def get_agent(agents, num):
     if isinstance(agents, Agent):
         return agents
@@ -102,6 +91,53 @@ def get_agent(agents, num):
         if agent.num == num:
             return i, agent
     return None
+
+def offset_points(offset,points:np.ndarray):
+    if points.ndim == 1:
+        points = points + offset
+        return np.array(points,dtype=np.int)
+    else:
+        for i in range(points.shape[0]):
+            points[i] = np.array((points[i] + offset),dtype=np.int)
+        return points
+
+class World():
+    def __init__(self, points, agents_pos=None, radius=None):
+        self.agents = None if agents_pos is None and radius is None else [make_agent(agents_pos[i], radius, i, self) for
+                                                                          i in range(agents_pos.shape[0])]
+        self.k = 50
+        self.edge = Polygon(points)
+        _,_,maxx,maxy = self.edge.bounds
+        self.W = int(max(maxy, maxx) * self.k * 2)
+    def render(self,iteration):
+        points = np.array(self.edge.exterior.coords[:]) * self.k
+        offset = np.array([self.W /4,self.W/4])
+        points = offset_points(offset,points)
+        img = np.zeros((self.W, self.W, 3), np.uint8)
+        img[:] = (200, 200, 200)
+
+        for i,point in enumerate(points):
+            j = (i+1) %(len(points))
+            cv2.line(img, (int(points[i][0]),int(points[i][1])), (int(points[j][0]),int(points[j][1])), (200, 0, 0), 3,lineType=cv2.LINE_AA)
+        for agent in self.agents:
+            central_pos = agent.central_pos * self.k
+            central = offset_points(offset,central_pos)
+            radius = agent.radius * self.k
+            cv2.circle(img, (central[0], central[1]), int(radius), (0, 0, 200), -1, lineType=cv2.LINE_AA)
+            cv2.circle(img, (central[0], central[1]), int(radius/self.k * 5), (40, 40, 40), -1, lineType=cv2.LINE_AA)
+
+
+
+        cv2.putText(img, "Iteration: " +str(iteration), (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (40, 40, 40),
+                    lineType=cv2.LINE_AA)
+        cv2.namedWindow("Environment")
+        cv2.imshow("Environment", img)
+        cv2.waitKey(1)
+
+
+
+
+
 
 
 class base_agent():
@@ -346,10 +382,11 @@ class U_fun():
 
 
 if __name__ == '__main__':
-    pos = np.array([[2, 2], [3.5, 2],[4,4]])
-    world = World([[0, 0], [10, 0], [5, 10]], agents_pos=pos, radius=2)
+    pos = np.array([[2, 2], [3.5, 2], [3, 3],[4,4],[10,10],[0,10]])
+    #world = World([[0, 0], [8, 0], [8, 8],[0,8]], agents_pos=pos, radius=2)
+    world = World([[0,0],[10,0],[10,10],[0,10]],agents_pos=pos, radius=2)
     agents = world.agents
-    for i in range(100):
+    for i in range(200):
         for agent in agents:
             agent.send_r()
         for agent in agents:
@@ -359,6 +396,7 @@ if __name__ == '__main__':
             agent.update_state()
         area =ops.unary_union([agent.sense_area for agent in agents])
         print('the coverage area is :{}'.format(area.intersection(world.edge).area))
+        world.render(i)
     plt.figure()
     figure(world.edge.exterior.coords[:])
     for agent in agents:
@@ -648,4 +686,4 @@ if __name__ == '__main__':
 # v2 = coord1 - coord3
 # v3 = coord2 - coord3
 # print('v1:{} v2:{}'.format(v1,v2))
-# print('v1_:{},v2_:{}'.format(cos_multi(v1,v2),cos_multi(v1,v3)))
+# print('v1_:{},v2_:{}
